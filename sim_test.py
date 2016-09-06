@@ -1,0 +1,140 @@
+from sympy import *
+from sympy.parsing import sympy_parser as spp
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+init_printing(use_unicode=True)
+
+
+# Plot range
+plot_from, plot_to, plot_step = -7.0, 7.0, 0.1
+# Start location
+# x_start = [-3.0, 2.0]
+# x_start = [4.0, 2.0]
+x_start = [-6.0, 5.0]
+# Precision for iterative methods
+target_precision = 0.1
+
+
+m = Matrix(symbols('x1 x2'))
+# obj = spp.parse_expr('x1**2 - 2 * x1 * x2 + 4 * x2**2')
+obj = spp.parse_expr('x1**2 - x2 * x1 - 5 * x1 + 4 * x2**2')
+
+# Design variables at mesh points
+i1 = np.arange(plot_from, plot_to, plot_step)
+i2 = np.arange(plot_from, plot_to, plot_step)
+x1_mesh, x2_mesh = np.meshgrid(i1, i2)
+f_str = obj.__str__().replace('x1', 'x1_mesh').replace('x2', 'x2_mesh')
+f_mesh = eval(f_str)
+
+# Create a contour plot
+plt.figure()
+
+plt.imshow(f_mesh, cmap='Paired', origin='lower', extent=[plot_from, plot_to, plot_from, plot_to])
+plt.colorbar()
+
+# Add some text to the plot
+plt.title('f(x) = ' + str(obj))
+plt.xlabel('x1')
+plt.ylabel('x2')
+# Show the plot
+# plt.show()
+
+
+def dfdx(x, g):
+    return [float(g[i].subs(m[0], x[0]).subs(m[1], x[1])) for i in range(len(g))]
+
+xn = np.zeros((2, 2))  # Newton method result global for comparison
+
+
+def nm():
+    ##################################################
+    # Newton's method
+    ##################################################
+    # gradient
+    g = [diff(obj, i) for i in m]
+    # Hessian matrix
+    H = [[float(diff(g[j], m[i])) for i in range(len(m))] for j in range(len(g))]
+
+    xn[0] = x_start
+    # Get gradient at start location (df/dx or grad(f))
+    gn = dfdx(xn[0], g)
+    # Compute search direction and magnitude (dx)
+    #  with dx = -inv(H) * grad
+    delta_xn = np.empty((1, 2))
+    delta_xn = -np.linalg.solve(H, gn)
+    xn[1] = xn[0] + delta_xn
+    plt.plot(xn[:, 0], xn[:, 1], 'k-o')
+
+
+def sd():
+    ##################################################
+    # Steepest descent method
+    ##################################################
+    # gradient
+    g = [diff(obj, i) for i in m]
+
+    # Use this alpha for every line search
+    alpha = 0.15
+    # Initialize xs
+    xs = [[0.0, 0.0]]
+    xs[0] = x_start
+    # Get gradient at start location (df/dx or grad(f))
+    iter_s = 0
+    while np.linalg.norm(xs[-1] - xn[1]) > target_precision:
+        gs = dfdx(xs[iter_s], g)
+        # Compute search direction and magnitude (dx)
+        #  with dx = - grad but no line searching
+        xs.append(xs[iter_s] - np.dot(alpha,dfdx(xs[iter_s], g)))
+        iter_s += 1
+        if iter_s > 1000:
+            break
+    xs = np.array(xs)
+    plt.plot(xs[:, 0], xs[:, 1], 'g-o')
+
+
+def es():
+    ##################################################
+    # (1+1) Evolutionary strategy method
+    ##################################################
+    xe = [[0.0, 0.0]]
+    xe[0] = x_start
+    iter_e = 0
+    n_good_mutations = 0.0
+    e_step = 3
+    n = 10
+
+    while true:
+        new_xe = xe[-1]
+
+        for i in range(n):
+            new_xe = np.random.normal(xe[-1], e_step, 2)
+            iter_e += 1
+            if obj.subs(m[0], new_xe[0]).subs(m[1], new_xe[1]) < obj.subs(m[0], xe[-1][0]).subs(m[1], xe[-1][1]):
+                n_good_mutations += 1
+                xe.append(new_xe)
+
+        if np.linalg.norm(xe[-1] - xn[1]) < target_precision:
+            break  # stopping criterion
+        if iter_e >= n:
+            p_pos = n_good_mutations / iter_e
+            n_good_mutations = 0.0
+            if p_pos < 0.2:
+                e_step *= 0.85
+            else:
+                e_step /= 0.85
+            iter_e = 0
+    xe = np.array(xe)
+    plt.plot(xe[:, 0], xe[:, 1], 'b-o')
+
+
+if __name__ == '__main__':
+    nm()
+    sd()
+    es()
+    plt.show()
+    import timeit
+    print(timeit.timeit("nm()", setup="from __main__ import nm", number=10))
+    print(timeit.timeit("sd()", setup="from __main__ import sd", number=10))
+    print(timeit.timeit("es()", setup="from __main__ import es", number=10))
