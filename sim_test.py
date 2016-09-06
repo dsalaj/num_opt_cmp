@@ -9,53 +9,17 @@ init_printing(use_unicode=True)
 
 # Plot range
 plot_from, plot_to, plot_step = -7.0, 7.0, 0.1
-# plot_from, plot_to, plot_step = -2.0, 3.0, 0.01
-# Start location
-# x_start = [-3.0, 2.0]
-# x_start = [4.0, 2.0]
-
-x_start = [-6.0, 5.0]
-# x_start = [-4.0, -5.0]
 # Precision for iterative methods
-target_precision = 0.5
-
+target_precision = 0.3
 
 m = Matrix(symbols('x1 x2'))
-# obj = spp.parse_expr('x1**2 - 2 * x1 * x2 + 4 * x2**2')
-# x_result = np.array([0, 0])
-
-obj = spp.parse_expr('x1**2 - x2 * x1 - x1 + 4 * x2**2')
-x_result = np.array([16/15, 2/15])
-
-# obj = spp.parse_expr('(1 - x1)**2 + 100 * (x2 - x1**2)**2')
-# x_result = np.array([1, 1])
-
-# Design variables at mesh points
-i1 = np.arange(plot_from, plot_to, plot_step)
-i2 = np.arange(plot_from, plot_to, plot_step)
-x1_mesh, x2_mesh = np.meshgrid(i1, i2)
-f_str = obj.__str__().replace('x1', 'x1_mesh').replace('x2', 'x2_mesh')
-f_mesh = eval(f_str)
-
-# Create a contour plot
-plt.figure()
-
-plt.imshow(f_mesh, cmap='Paired', origin='lower', extent=[plot_from-1, plot_to+1, plot_from-1, plot_to+1])
-plt.colorbar()
-
-# Add some text to the plot
-plt.title('f(x) = ' + str(obj))
-plt.xlabel('x1')
-plt.ylabel('x2')
-# Show the plot
-# plt.show()
 
 
 def dfdx(x, g):
     return [float(g[i].subs(m[0], x[0]).subs(m[1], x[1])) for i in range(len(g))]
 
 
-def sd():
+def sd(alpha=0.0002):
     """
     Steepest Descent - 1st order optimization
     :return:
@@ -63,9 +27,6 @@ def sd():
     print "STEEPEST DESCENT: start"
     # gradient
     g = [diff(obj, i) for i in m]
-    # Use this alpha for every line search
-    alpha = 0.05  # Quadratic
-    # alpha = 0.0002  # Rosenbrock
     # Initialize xs
     xs = [[0.0, 0.0]]
     xs[0] = x_start
@@ -103,7 +64,7 @@ def nm():
 
     iter_n = 0
     while np.linalg.norm(xn[-1] - x_result) > target_precision:
-        print "NEWTON METHOD: distance:", np.linalg.norm(xn[-1] - x_result)
+        # print "NEWTON METHOD: distance:", np.linalg.norm(xn[-1] - x_result)
         gn = Matrix(dfdx(xn[iter_n], g))
         delta_xn = -H_inv * gn
         delta_xn = delta_xn.subs(m[0], xn[iter_n][0]).subs(m[1], xn[iter_n][1])
@@ -125,12 +86,10 @@ def es():
     xe[0] = x_start
     iter_e = 0
     n_good_mutations = 0.0
-    e_step = 3
+    e_step = 2
     n = 10
 
     while true:
-        new_xe = xe[-1]
-
         for i in range(n):
             new_xe = np.random.normal(xe[-1], e_step, 2)
             iter_e += 1
@@ -139,7 +98,7 @@ def es():
                 xe.append(new_xe)
 
         distance = np.linalg.norm(xe[-1] - x_result)
-        print "EVOLUTIONARY STRATEGY: distance:", distance
+        # print "EVOLUTIONARY STRATEGY: distance:", distance
         if distance < target_precision:
             break  # stopping criterion
         if iter_e >= n:
@@ -155,10 +114,72 @@ def es():
 
 
 if __name__ == '__main__':
+    ####################
+    # Quadratic function
+    ####################
+    # Start location
+    x_start = [-4.0, 6.0]
+
+    # obj = spp.parse_expr('x1**2 - x2 * x1 - x1 + 4 * x2**2')
+    # x_result = np.array([16/15, 2/15])
+    obj = spp.parse_expr('x1**2 - 2 * x1 * x2 + 4 * x2**2')
+    x_result = np.array([0, 0])
+
+    # Design variables at mesh points
+    i1 = np.arange(plot_from, plot_to, plot_step)
+    i2 = np.arange(plot_from, plot_to, plot_step)
+    x1_mesh, x2_mesh = np.meshgrid(i1, i2)
+    f_str = obj.__str__().replace('x1', 'x1_mesh').replace('x2', 'x2_mesh')
+    f_mesh = eval(f_str)
+
+    # Create a contour plot
+    plt.figure()
+
+    plt.imshow(f_mesh, cmap='Paired', origin='lower',
+               extent=[plot_from - 20, plot_to + 20, plot_from - 20, plot_to + 20])
+    plt.colorbar()
+
+    # Add some text to the plot
+    plt.title('f(x) = ' + str(obj))
+    plt.xlabel('x1')
+    plt.ylabel('x2')
     nm()
-    sd()
+    sd(alpha=0.05)
     es()
     plt.show()
+
+    #####################
+    # Rosenbrock function
+    #####################
+    # Start location
+    x_start = [-4.0, -5.0]
+
+    obj = spp.parse_expr('(1 - x1)**2 + 100 * (x2 - x1**2)**2')
+    x_result = np.array([1, 1])
+
+    # Design variables at mesh points
+    i1 = np.arange(plot_from, plot_to, plot_step)
+    i2 = np.arange(plot_from, plot_to, plot_step)
+    x1_mesh, x2_mesh = np.meshgrid(i1, i2)
+    f_str = obj.__str__().replace('x1', 'x1_mesh').replace('x2', 'x2_mesh')
+    f_mesh = eval(f_str)
+
+    # Create a contour plot
+    plt.figure()
+
+    plt.imshow(f_mesh, cmap='Paired', origin='lower',
+               extent=[plot_from - 20, plot_to + 20, plot_from - 20, plot_to + 20])
+    plt.colorbar()
+
+    # Add some text to the plot
+    plt.title('f(x) = ' + str(obj))
+    plt.xlabel('x1')
+    plt.ylabel('x2')
+    nm()
+    sd(alpha=0.0002)
+    es()
+    plt.show()
+
     # import timeit
     # print(timeit.timeit("nm()", setup="from __main__ import nm", number=10))
     # print(timeit.timeit("sd()", setup="from __main__ import sd", number=10))
