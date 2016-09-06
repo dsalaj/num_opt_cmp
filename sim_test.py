@@ -8,18 +8,21 @@ init_printing(use_unicode=True)
 
 
 # Plot range
-plot_from, plot_to, plot_step = -7.0, 7.0, 0.1
+# plot_from, plot_to, plot_step = -7.0, 7.0, 0.1
+plot_from, plot_to, plot_step = -2.0, 3.0, 0.01
 # Start location
 # x_start = [-3.0, 2.0]
 # x_start = [4.0, 2.0]
-x_start = [-6.0, 5.0]
+# x_start = [-6.0, 5.0]
+x_start = [-2.0, -2.4]
 # Precision for iterative methods
-target_precision = 0.1
+target_precision = 0.05
 
 
 m = Matrix(symbols('x1 x2'))
 # obj = spp.parse_expr('x1**2 - 2 * x1 * x2 + 4 * x2**2')
-obj = spp.parse_expr('x1**2 - x2 * x1 - 5 * x1 + 4 * x2**2')
+# obj = spp.parse_expr('x1**2 - x2 * x1 - 5 * x1 + 4 * x2**2')
+obj = spp.parse_expr('(1 - x1)**2 + 100 * (x2 - x1**2)**2')
 
 # Design variables at mesh points
 i1 = np.arange(plot_from, plot_to, plot_step)
@@ -31,7 +34,7 @@ f_mesh = eval(f_str)
 # Create a contour plot
 plt.figure()
 
-plt.imshow(f_mesh, cmap='Paired', origin='lower', extent=[plot_from, plot_to, plot_from, plot_to])
+plt.imshow(f_mesh, cmap='Paired', origin='lower', extent=[plot_from-1, plot_to+1, plot_from-1, plot_to+1])
 plt.colorbar()
 
 # Add some text to the plot
@@ -46,58 +49,67 @@ def dfdx(x, g):
     return [float(g[i].subs(m[0], x[0]).subs(m[1], x[1])) for i in range(len(g))]
 
 xn = np.zeros((2, 2))  # Newton method result global for comparison
-
-
-def nm():
-    ##################################################
-    # Newton's method
-    ##################################################
-    # gradient
-    g = [diff(obj, i) for i in m]
-    # Hessian matrix
-    H = [[float(diff(g[j], m[i])) for i in range(len(m))] for j in range(len(g))]
-
-    xn[0] = x_start
-    # Get gradient at start location (df/dx or grad(f))
-    gn = dfdx(xn[0], g)
-    # Compute search direction and magnitude (dx)
-    #  with dx = -inv(H) * grad
-    delta_xn = np.empty((1, 2))
-    delta_xn = -np.linalg.solve(H, gn)
-    xn[1] = xn[0] + delta_xn
-    plt.plot(xn[:, 0], xn[:, 1], 'k-o')
+x_result = np.array([1, 1])
 
 
 def sd():
-    ##################################################
-    # Steepest descent method
-    ##################################################
+    """
+    Steepest Descent - 1st order optimization
+    :return:
+    """
     # gradient
     g = [diff(obj, i) for i in m]
-
     # Use this alpha for every line search
-    alpha = 0.15
+    alpha = 0.0008
     # Initialize xs
     xs = [[0.0, 0.0]]
     xs[0] = x_start
     # Get gradient at start location (df/dx or grad(f))
     iter_s = 0
-    while np.linalg.norm(xs[-1] - xn[1]) > target_precision:
+    while np.linalg.norm(xs[-1] - x_result) > target_precision:
+        # print "distance", np.linalg.norm(xs[-1] - x_result), "is >", target_precision
         gs = dfdx(xs[iter_s], g)
+        # print "gradient for point", xs[iter_s], "is", gs
         # Compute search direction and magnitude (dx)
         #  with dx = - grad but no line searching
-        xs.append(xs[iter_s] - np.dot(alpha,dfdx(xs[iter_s], g)))
+        xs.append(xs[iter_s] - np.dot(alpha, gs))
+        # print xs[-1]
         iter_s += 1
-        if iter_s > 1000:
+        if iter_s > 10000:
             break
     xs = np.array(xs)
     plt.plot(xs[:, 0], xs[:, 1], 'g-o')
 
 
+def nm():
+    """
+    Newton's method - 2nd order optimization
+    :return:
+    """
+    # gradient
+    g = [diff(obj, i) for i in m]
+    # Hessian matrix
+    H = Matrix([[diff(g[j], m[i]) for i in range(len(m))] for j in range(len(g))])
+
+    xn[0] = x_start
+    # Get gradient at start location (df/dx or grad(f))
+    gn = Matrix(dfdx(xn[0], g))
+    # Compute search direction and magnitude (dx)
+    #  with dx = -inv(H) * grad
+    delta_xn = np.empty((1, 2))
+    H_inv = H.inv()
+    # delta_xn = -np.linalg.solve(H_inv, gn)
+    delta_xn = -H_inv * gn
+    delta_xn = delta_xn.subs(m[0], xn[0][0]).subs(m[1], xn[0][1])
+    xn[1] = xn[0] + list(delta_xn)
+    plt.plot(xn[:, 0], xn[:, 1], 'k-o')
+
+
 def es():
-    ##################################################
-    # (1+1) Evolutionary strategy method
-    ##################################################
+    """
+    (1+1) Evolutionary Strategy - 0th order method
+    :return:
+    """
     xe = [[0.0, 0.0]]
     xe[0] = x_start
     iter_e = 0
@@ -115,7 +127,7 @@ def es():
                 n_good_mutations += 1
                 xe.append(new_xe)
 
-        if np.linalg.norm(xe[-1] - xn[1]) < target_precision:
+        if np.linalg.norm(xe[-1] - x_result) < target_precision:
             break  # stopping criterion
         if iter_e >= n:
             p_pos = n_good_mutations / iter_e
@@ -128,13 +140,18 @@ def es():
     xe = np.array(xe)
     plt.plot(xe[:, 0], xe[:, 1], 'b-o')
 
+#sd()
+#es()
+nm()
+plt.show()
 
-if __name__ == '__main__':
-    nm()
-    sd()
-    es()
-    plt.show()
-    import timeit
-    print(timeit.timeit("nm()", setup="from __main__ import nm", number=10))
-    print(timeit.timeit("sd()", setup="from __main__ import sd", number=10))
-    print(timeit.timeit("es()", setup="from __main__ import es", number=10))
+#
+# if __name__ == '__main__':
+#     nm()
+#     sd()
+#     es()
+#     plt.show()
+#     import timeit
+#     print(timeit.timeit("nm()", setup="from __main__ import nm", number=10))
+#     print(timeit.timeit("sd()", setup="from __main__ import sd", number=10))
+#     print(timeit.timeit("es()", setup="from __main__ import es", number=10))
