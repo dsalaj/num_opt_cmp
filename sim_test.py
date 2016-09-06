@@ -8,21 +8,27 @@ init_printing(use_unicode=True)
 
 
 # Plot range
-# plot_from, plot_to, plot_step = -7.0, 7.0, 0.1
-plot_from, plot_to, plot_step = -2.0, 3.0, 0.01
+plot_from, plot_to, plot_step = -7.0, 7.0, 0.1
+# plot_from, plot_to, plot_step = -2.0, 3.0, 0.01
 # Start location
 # x_start = [-3.0, 2.0]
 # x_start = [4.0, 2.0]
-# x_start = [-6.0, 5.0]
-x_start = [-2.0, -2.4]
+
+x_start = [-6.0, 5.0]
+# x_start = [-4.0, -5.0]
 # Precision for iterative methods
-target_precision = 0.05
+target_precision = 0.5
 
 
 m = Matrix(symbols('x1 x2'))
 # obj = spp.parse_expr('x1**2 - 2 * x1 * x2 + 4 * x2**2')
-# obj = spp.parse_expr('x1**2 - x2 * x1 - 5 * x1 + 4 * x2**2')
-obj = spp.parse_expr('(1 - x1)**2 + 100 * (x2 - x1**2)**2')
+# x_result = np.array([0, 0])
+
+obj = spp.parse_expr('x1**2 - x2 * x1 - x1 + 4 * x2**2')
+x_result = np.array([16/15, 2/15])
+
+# obj = spp.parse_expr('(1 - x1)**2 + 100 * (x2 - x1**2)**2')
+# x_result = np.array([1, 1])
 
 # Design variables at mesh points
 i1 = np.arange(plot_from, plot_to, plot_step)
@@ -48,28 +54,26 @@ plt.ylabel('x2')
 def dfdx(x, g):
     return [float(g[i].subs(m[0], x[0]).subs(m[1], x[1])) for i in range(len(g))]
 
-xn = np.zeros((2, 2))  # Newton method result global for comparison
-x_result = np.array([1, 1])
-
 
 def sd():
     """
     Steepest Descent - 1st order optimization
     :return:
     """
+    print "STEEPEST DESCENT: start"
     # gradient
     g = [diff(obj, i) for i in m]
     # Use this alpha for every line search
-    alpha = 0.0008
+    alpha = 0.05  # Quadratic
+    # alpha = 0.0002  # Rosenbrock
     # Initialize xs
     xs = [[0.0, 0.0]]
     xs[0] = x_start
     # Get gradient at start location (df/dx or grad(f))
     iter_s = 0
     while np.linalg.norm(xs[-1] - x_result) > target_precision:
-        # print "distance", np.linalg.norm(xs[-1] - x_result), "is >", target_precision
+        # print "STEEPEST DESCENT: distance:", np.linalg.norm(xs[-1] - x_result)
         gs = dfdx(xs[iter_s], g)
-        # print "gradient for point", xs[iter_s], "is", gs
         # Compute search direction and magnitude (dx)
         #  with dx = - grad but no line searching
         xs.append(xs[iter_s] - np.dot(alpha, gs))
@@ -77,6 +81,7 @@ def sd():
         iter_s += 1
         if iter_s > 10000:
             break
+    print "STEEPEST DESCENT: result distance:", np.linalg.norm(xs[-1] - x_result)
     xs = np.array(xs)
     plt.plot(xs[:, 0], xs[:, 1], 'g-o')
 
@@ -86,22 +91,27 @@ def nm():
     Newton's method - 2nd order optimization
     :return:
     """
+    print "NEWTON METHOD: start"
     # gradient
     g = [diff(obj, i) for i in m]
     # Hessian matrix
     H = Matrix([[diff(g[j], m[i]) for i in range(len(m))] for j in range(len(g))])
-
-    xn[0] = x_start
-    # Get gradient at start location (df/dx or grad(f))
-    gn = Matrix(dfdx(xn[0], g))
-    # Compute search direction and magnitude (dx)
-    #  with dx = -inv(H) * grad
-    delta_xn = np.empty((1, 2))
     H_inv = H.inv()
-    # delta_xn = -np.linalg.solve(H_inv, gn)
-    delta_xn = -H_inv * gn
-    delta_xn = delta_xn.subs(m[0], xn[0][0]).subs(m[1], xn[0][1])
-    xn[1] = xn[0] + list(delta_xn)
+
+    xn = [[0, 0]]  # Newton method result global for comparison
+    xn[0] = x_start
+
+    iter_n = 0
+    while np.linalg.norm(xn[-1] - x_result) > target_precision:
+        print "NEWTON METHOD: distance:", np.linalg.norm(xn[-1] - x_result)
+        gn = Matrix(dfdx(xn[iter_n], g))
+        delta_xn = -H_inv * gn
+        delta_xn = delta_xn.subs(m[0], xn[iter_n][0]).subs(m[1], xn[iter_n][1])
+        xn.append(Matrix(xn[iter_n]) + delta_xn)
+        iter_n += 1
+    print "NEWTON METHOD: result distance:", np.linalg.norm(xn[-1] - x_result)
+
+    xn = np.array(xn)
     plt.plot(xn[:, 0], xn[:, 1], 'k-o')
 
 
@@ -110,6 +120,7 @@ def es():
     (1+1) Evolutionary Strategy - 0th order method
     :return:
     """
+    print "EVOLUTIONARY STRATEGY: start"
     xe = [[0.0, 0.0]]
     xe[0] = x_start
     iter_e = 0
@@ -127,7 +138,9 @@ def es():
                 n_good_mutations += 1
                 xe.append(new_xe)
 
-        if np.linalg.norm(xe[-1] - x_result) < target_precision:
+        distance = np.linalg.norm(xe[-1] - x_result)
+        print "EVOLUTIONARY STRATEGY: distance:", distance
+        if distance < target_precision:
             break  # stopping criterion
         if iter_e >= n:
             p_pos = n_good_mutations / iter_e
@@ -140,18 +153,13 @@ def es():
     xe = np.array(xe)
     plt.plot(xe[:, 0], xe[:, 1], 'b-o')
 
-#sd()
-#es()
-nm()
-plt.show()
 
-#
-# if __name__ == '__main__':
-#     nm()
-#     sd()
-#     es()
-#     plt.show()
-#     import timeit
-#     print(timeit.timeit("nm()", setup="from __main__ import nm", number=10))
-#     print(timeit.timeit("sd()", setup="from __main__ import sd", number=10))
-#     print(timeit.timeit("es()", setup="from __main__ import es", number=10))
+if __name__ == '__main__':
+    nm()
+    sd()
+    es()
+    plt.show()
+    # import timeit
+    # print(timeit.timeit("nm()", setup="from __main__ import nm", number=10))
+    # print(timeit.timeit("sd()", setup="from __main__ import sd", number=10))
+    # print(timeit.timeit("es()", setup="from __main__ import es", number=10))
